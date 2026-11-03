@@ -94,7 +94,8 @@ export default function TeamPanel({ teamData, heroNames, canon, portrait, side =
         const d = data[p.accountId.trim()];
         const empty = p.accountId.trim() === '';
         const sorted = [...stats[p.id].list].filter(s => s.totalGames >= minGames);
-        if (sortBy === 'recent') sorted.sort((a, b) => b.games - a.games || b.totalGames - a.totalGames);
+        if (sortBy === 'total') sorted.sort((a, b) => b.totalGames - a.totalGames);
+        else if (sortBy === 'recent') sorted.sort((a, b) => b.games - a.games || b.totalGames - a.totalGames);
         else if (sortBy === 'form') sorted.sort((a, b) => formPoints(b).points - formPoints(a).points);
         const list = (sortBy === 'recent' ? sorted.filter(s => s.games > 0) : sorted).slice(0, TOP_N);
         return <div className="tp-card" key={p.id}>
@@ -110,7 +111,7 @@ export default function TeamPanel({ teamData, heroNames, canon, portrait, side =
             {empty ? 'Account-ID eintragen' : d?.profile ? <>{d.source === 'opendota' ? 'OpenDota' : 'STRATZ'}: <b>{d.profile.name ?? 'kein Profilname'}</b> · {d.totalMatches ?? '?'} Spiele gesamt · {d.matches.length} letzte Spiele geladen</> : 'noch nicht geladen'}
           </div>
           {d?.note && <div className="tp-note">{d.note}</div>}
-          {d && !d.error && (d.totalMatches ?? 0) > 100 && d.heroes.reduce((n, h) => n + h.games, 0) < 0.6 * (d.totalMatches ?? 0) && !manual[p.accountId.trim()] &&
+          {d && !d.error && (d.totalMatches ?? 0) > 100 && d.heroes.reduce((n, h) => n + h.games, 0) < 0.6 * (d.totalMatches ?? 0) && !manual[p.accountId.trim()] && !teamData.defaultTotals[p.accountId.trim()] &&
             <div className="tp-error">Gesamtbilanz unvollständig ({d.heroes.reduce((n, h) => n + h.games, 0)} von {d.totalMatches} Spielen) – Helden-Tabelle von Dotabuff unten einfügen.</div>}
           {d?.error && <div className="tp-error">{d.error}</div>}
           <details className="tp-import">
