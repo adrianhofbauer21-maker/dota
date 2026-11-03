@@ -4,6 +4,7 @@ import TeamPanel from './TeamPanel';
 import RecommendPanel from './RecommendPanel';
 import MetaPanel from './MetaPanel';
 import { useTeamData } from './teamData';
+import { normHeroName } from './dotabuffImport';
 import { useRelations } from './matchups';
 import { DEFAULT_WEIGHTS, type Weights } from './recommend';
 import { BRACKET_OPTIONS, buildMeta, useHeroStats, useStratzMeta, type BracketKey, type MetaByPos } from './meta';
@@ -89,8 +90,9 @@ export default function App() {
   const [entries,setEntries] = useState<Entry[]>([]);
   const [search,setSearch] = useState('');
   const [showUsed,setShowUsed] = useState(true);
-  const teamData = useTeamData();
   const { raw: heroRaw, error: heroStatsError } = useHeroStats();
+  const nameToHeroId = useMemo(() => new Map(heroRaw.map(h => [normHeroName(h.localized_name), h.id] as const)), [heroRaw]);
+  const teamData = useTeamData(nameToHeroId);
   const [bracket,setBracket] = useState<BracketKey>('immortal');
   const [weights,setWeights] = useState<Weights>(DEFAULT_WEIGHTS);
   const heroNames = useMemo(() => Object.fromEntries(heroRaw.map(h => [h.id, h.localized_name])) as Record<number,string>, [heroRaw]);

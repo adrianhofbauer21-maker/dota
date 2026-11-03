@@ -114,7 +114,7 @@ export default function TeamPanel({ teamData, heroNames, canon, portrait, side =
             <div className="tp-error">Gesamtbilanz unvollständig ({d.heroes.reduce((n, h) => n + h.games, 0)} von {d.totalMatches} Spielen) – Helden-Tabelle von Dotabuff unten einfügen.</div>}
           {d?.error && <div className="tp-error">{d.error}</div>}
           <details className="tp-import">
-            <summary>{manual[p.accountId.trim()] ? `Dotabuff-Import aktiv (${manual[p.accountId.trim()].rows.reduce((n, r) => n + r.games, 0)} Spiele, ${new Date(manual[p.accountId.trim()].at).toLocaleDateString('de-AT')})` : 'Gesamtspiele aus Dotabuff einfügen'}</summary>
+            <summary>{!manual[p.accountId.trim()] && teamData.defaultTotals[p.accountId.trim()] ? `Dotabuff-Werte fest eingebaut (${teamData.defaultTotals[p.accountId.trim()].reduce((n, r) => n + r.games, 0)} Spiele) – eigenen Import einfügen, um sie zu überschreiben` : manual[p.accountId.trim()] ? `Dotabuff-Import aktiv (${manual[p.accountId.trim()].rows.reduce((n, r) => n + r.games, 0)} Spiele, ${new Date(manual[p.accountId.trim()].at).toLocaleDateString('de-AT')})` : 'Gesamtspiele aus Dotabuff einfügen'}</summary>
             <textarea rows={4} placeholder="Tabelle der Dotabuff-Seite „Heroes“ hier einfügen …" value={pasteText[p.id] ?? ''} onChange={e => setPasteText(t => ({ ...t, [p.id]: e.target.value }))} />
             <div className="tp-import-btns">
               <button disabled={!(pasteText[p.id] ?? '').trim()} onClick={() => importFor(p.id, p.accountId)}>Übernehmen</button>

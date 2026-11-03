@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchPlayerHeroes, fetchProfile, fetchRecentMatches, type MatchRow, type PlayerHeroRow, type Profile } from './opendota';
 import { heroStats, type HeroStat } from './stats';
 import { fetchStratzPlayer } from './stratzPlayer';
+import { normHeroName } from './dotabuffImport';
+import { DEFAULT_TOTALS } from './defaultTotals';
 import { DEFAULT_ENEMY, loadEnemyTeam, loadTeam, saveEnemyTeam, saveTeam, type TeamPlayer } from './team';
 
 export type PlayerData = {
@@ -30,7 +32,7 @@ function saveCache(c: Record<string, PlayerData>) {
 }
 
 /** Team, geladene OpenDota-Daten und daraus berechnete Hero-Statistiken je Spieler. */
-export function useTeamData() {
+export function useTeamData(nameToId: Map<string, number> = new Map()) {
   const [team, setTeam] = useState<TeamPlayer[]>(loadTeam);
   const [enemyName, setEnemyNameState] = useState<string>(() => { try { return localStorage.getItem('dota-enemy-name-v1') ?? ''; } catch { return ''; } });
   function setEnemyName(n: string) { setEnemyNameState(n); try { localStorage.setItem('dota-enemy-name-v1', n); } catch { /* ignorieren */ } }
@@ -65,6 +67,20 @@ export function useTeamData() {
     setEnemyWindowState(n);
     try { localStorage.setItem('dota-enemy-form-window-v1', String(n)); } catch { /* ignorieren */ }
   }
+  // Fest eingebaute Gesamtbilanz (defaultTotals.ts): wird mit den Hero-Namen der Quelle in Hero-IDs umgesetzt.
+  const defaultTotals = useMemo(() => {
+    const out: Record<string, PlayerHeroRow[]> = {};
+    if (nameToId.size === 0) return out;
+    for (const [accountId, list] of Object.entries(DEFAULT_TOTALS)) {
+      const rows: PlayerHeroRow[] = [];
+      for (const [name, games, pct] of list) {
+        const heroId = nameToId.get(normHeroName(name));
+        if (heroId !== undefined) rows.push({ hero_id: heroId, games, win: Math.round((games * pct) / 100), last_played: 0 });
+      }
+      if (rows.length) out[accountId] = rows;
+    }
+    return out;
+  }, [nameToId]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
 
@@ -178,7 +194,7 @@ export function useTeamData() {
     for (const p of players) {
       const d = data[p.accountId.trim()];
       // Gesamtbilanz: eingefügte Werte haben Vorrang vor der Quelle (je Held), übrige Helden kommen aus der Quelle.
-      const m = manual[p.accountId.trim()]?.rows ?? [];
+      const m = manual[p.accountId.trim()]?.rows ?? defaultTotals[p.accountId.trim()] ?? [];
       const mIds = new Set(m.map(r => r.hero_id));
       const totals = [...m, ...(d?.heroes ?? []).filter(h => !mIds.has(h.hero_id))];
       // Form: nur die neuesten `formWindow` Spiele (die Quelle liefert bis zu MATCH_LIMIT).
@@ -188,10 +204,10 @@ export function useTeamData() {
     }
     return out;
   };
-  const stats = useMemo(() => computeStats(team, formWindow), [team, data, manual, formWindow]); // eslint-disable-line react-hooks/exhaustive-deps
-  const enemyStats = useMemo(() => computeStats(enemyTeam, enemyWindow), [enemyTeam, data, manual, enemyWindow]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stats = useMemo(() => computeStats(team, formWindow), [team, data, manual, defaultTotals, formWindow]); // eslint-disable-line react-hooks/exhaustive-deps
+  const enemyStats = useMemo(() => computeStats(enemyTeam, enemyWindow), [enemyTeam, data, manual, defaultTotals, enemyWindow]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { team, update, enemyTeam, updateEnemy, clearEnemy, addEnemy, removeEnemy, setEnemyPlayers, enemyName, setEnemyName, data, loading, status, loadAll, stats, enemyStats, manual, setManual, formWindow, setFormWindow, enemyWindow, setEnemyWindow };
+  return { team, update, enemyTeam, updateEnemy, clearEnemy, addEnemy, removeEnemy, setEnemyPlayers, enemyName, setEnemyName, data, loading, status, loadAll, stats, enemyStats, manual, defaultTotals, setManual, formWindow, setFormWindow, enemyWindow, setEnemyWindow };
 }
 
 export type TeamData = ReturnType<typeof useTeamData>;
