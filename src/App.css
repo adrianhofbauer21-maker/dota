@@ -192,3 +192,8 @@ body, #root { display:block; min-height:100vh; }
 .cm-ver{opacity:.5;font-size:12px}
 [hidden]{display:none!important}
 @media (max-width:700px){.cm-tabs-hint{display:none}.cm-tabs button{flex:1;padding:8px 6px;font-size:13px}}
+.sc-hist{max-height:300px;overflow:auto;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px 10px;margin:8px 0}
+.sc-hist table{width:100%;border-collapse:collapse}.sc-hist th{text-align:left;font-size:12px;opacity:.7;position:sticky;top:0;background:#0f141c}
+.sc-hist td{padding:4px 10px 4px 0;font-size:14px}.sc-hist tr.dim{opacity:.4}
+.sc-hist tr:hover td{background:rgba(255,255,255,.06)}
+.sc-hist .win{color:#2ee06a}.sc-hist .loss{color:#ff6a5a}

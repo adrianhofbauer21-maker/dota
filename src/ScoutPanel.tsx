@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { useTeamData } from './teamData';
-import { LANE_LINES, fetchMatchList, fmtTime, loadMatches, zoneOf, type ScoutMatch, type Ward } from './scout';
+import { LEAGUE_TEAMS } from './leagueTeams';
+import { LANE_LINES, fetchMatchList, fetchMatchPlayback, fmtTime, toScoutMatch, zoneOf, type MatchListEntry, type ScoutMatch, type Ward } from './scout';
 
 type Props = { teamData: ReturnType<typeof useTeamData>; heroNames: Record<number, string>; startOpen?: boolean };
 
@@ -11,34 +12,37 @@ const OBS_R = 12.5, SENT_R = 7.8; // Sichtradius in Karten-Zellen (1600 bzw. 100
 const FOUNTAIN_R = { x: 74, y: 74 }, FOUNTAIN_D = { x: 180, y: 180 };
 const IMG = 768, IMG_R = { x: 60, y: 708 }, IMG_D = { x: 696, y: 72 };
 
-type Side = 'radiant' | 'dire';
 type WardTeam = 'focus' | 'enemy' | 'all';
 type Trail = 90 | 300 | 100000;
 
 export default function ScoutPanel({ teamData, heroNames, startOpen }: Props) {
-  const candidates = useMemo(() => {
-    const own = teamData.team.filter(p => /^\d+$/.test(p.accountId)).map(p => ({ id: p.accountId, label: `${p.name} (eigenes Team)` }));
-    const en = teamData.enemyTeam.filter(p => /^\d+$/.test(p.accountId)).map(p => ({ id: p.accountId, label: `${p.name} (${teamData.enemyName || 'Gegner'})` }));
-    return [...own, ...en];
+  const groups = useMemo(() => {
+    const ok = (id: string) => /^\d+$/.test(id);
+    const own = teamData.team.filter(p => ok(p.accountId)).map(p => ({ id: p.accountId, label: p.name }));
+    const en = teamData.enemyTeam.filter(p => ok(p.accountId)).map(p => ({ id: p.accountId, label: p.name }));
+    const g: { label: string; players: { id: string; label: string }[] }[] = [{ label: 'Eigenes Team', players: own }];
+    if (en.length) g.push({ label: `Aktuelles Gegnerteam${teamData.enemyName ? ` (${teamData.enemyName})` : ''}`, players: en });
+    for (const t of LEAGUE_TEAMS) g.push({ label: `Liga 4 · [${t.tag}] ${t.name}`, players: t.players.filter(p => ok(p.accountId)).map(p => ({ id: p.accountId, label: p.name })) });
+    return g.filter(x => x.players.length > 0);
   }, [teamData.team, teamData.enemyTeam, teamData.enemyName]);
+  const candidates = useMemo(() => groups.flatMap(g => g.players), [groups]);
 
   const [open, setOpen] = useState(Boolean(startOpen));
   const [accountId, setAccountId] = useState('');
   const [custom, setCustom] = useState('');
-  const [count, setCount] = useState(10);
-  const [matches, setMatches] = useState<ScoutMatch[]>([]);
+  const [list, setList] = useState<MatchListEntry[]>([]);
+  const [loaded, setLoaded] = useState<Record<number, ScoutMatch>>({});
+  const [curId, setCurId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [matchInput, setMatchInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
-  const [skipped, setSkipped] = useState({ unparsed: 0, failed: 0 });
 
-  const [side, setSide] = useState<Side>('radiant');
   const [wardTeam, setWardTeam] = useState<WardTeam>('all');
   const [obs, setObs] = useState(true);
   const [sent, setSent] = useState(true);
   const [trail, setTrail] = useState<Trail>(90);
   const [allPlayers, setAllPlayers] = useState(true);
-  const [sel, setSel] = useState(0);
   const [clock, setClock] = useState(0);
   const [hover, setHover] = useState<{ w: Ward; m: ScoutMatch; px: number; py: number } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -67,24 +71,41 @@ export default function ScoutPanel({ teamData, heroNames, startOpen }: Props) {
 
   const id = custom.trim() || accountId || candidates[0]?.id || '';
 
-  const load = async () => {
-    if (!/^\d+$/.test(id)) { setError('Bitte einen Spieler wählen oder eine numerische Account-ID eingeben.'); return; }
-    setLoading(true); setError(''); setMatches([]); setProgress('Spiele werden gesucht …');
+  const loadList = async (accId: string) => {
+    if (!/^\d+$/.test(accId)) { setError('Bitte einen Spieler wählen oder eine numerische Account-ID eingeben.'); return; }
+    setLoading(true); setError(''); setList([]); setCurId(null);
     try {
-      const list = await fetchMatchList(id, Math.min(60, count * 3));
-      const parsed = list.filter(m => m.parsed).slice(0, count);
-      const unparsed = list.slice(0, count * 2).filter(m => !m.parsed).length;
-      if (parsed.length === 0) { setError('STRATZ hat unter den letzten Spielen keines mit ausgewertetem Replay (nur ausgewertete Spiele haben Wards/Positionen).'); setLoading(false); return; }
-      const res = await loadMatches(parsed, (d, t) => setProgress(`Replaydaten ${d}/${t} …`));
-      setMatches(res.matches); setSkipped({ unparsed, failed: res.failed }); setSel(0); setClock(0);
-      if (res.matches.length === 0) setError('Keine Replaydaten abrufbar (STRATZ-Limit? In ein paar Minuten erneut versuchen).');
+      const l = await fetchMatchList(accId, 40);
+      setList(l);
+      if (l.length === 0) setError('STRATZ liefert für diesen Spieler keine Spiele (Profil evtl. privat).');
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    setLoading(false); setProgress('');
+    setLoading(false);
   };
 
-  const shown = useMemo(() => matches.filter(m => (side === 'radiant') === m.focusRadiant), [matches, side]);
-  const nRad = matches.filter(m => m.focusRadiant).length;
-  const cur = shown[Math.min(sel, shown.length - 1)];
+  const showMatch = (m: ScoutMatch) => { setLoaded(prev => ({ ...prev, [m.id]: m })); setCurId(m.id); setClock(0); setError(''); };
+  const openMatch = async (e: MatchListEntry) => {
+    if (loaded[e.id]) { setCurId(e.id); setClock(0); setError(''); return; }
+    if (!e.parsed) { setError(`Match ${e.id}: STRATZ hat dieses Replay (noch) nicht ausgewertet – es gibt keine Ward-/Positionsdaten. Neuere Spiele werden oft erst nach einiger Zeit ausgewertet.`); return; }
+    setBusyId(e.id); setError('');
+    try { showMatch(toScoutMatch(await fetchMatchPlayback(e.id), { slot: e.slot, radiant: e.radiant, heroId: e.heroId })); }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    setBusyId(null);
+  };
+  const openById = async () => {
+    const mid = Number(matchInput.trim());
+    if (!Number.isInteger(mid) || mid <= 0) { setError('Bitte eine numerische Match-ID eingeben.'); return; }
+    setBusyId(mid); setError('');
+    try {
+      const raw = await fetchMatchPlayback(mid);
+      const me = raw.players.find(p => String(p.steamAccountId) === id) ?? raw.players[0];
+      if (!raw.playbackData?.wardEvents) setError('Für dieses Match liegen keine Replaydaten vor (nicht ausgewertet).');
+      showMatch(toScoutMatch(raw, { slot: me.playerSlot, radiant: me.isRadiant, heroId: me.heroId }));
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    setBusyId(null);
+  };
+
+  const matches = useMemo(() => Object.values(loaded), [loaded]);
+  const cur = curId !== null ? loaded[curId] : undefined;
   const maxClock = cur ? Math.max(60, cur.durationSeconds) : 0;
 
   // Zellen -> Canvas-Pixel. Mit Kartenbild über die beiden Brunnen kalibriert (je Achse), sonst schematisch.
@@ -176,33 +197,37 @@ export default function ScoutPanel({ teamData, heroNames, startOpen }: Props) {
       {open && <>
         <p className="muted">Einzelne Spiele aus ausgewerteten öffentlichen Replays (STRATZ): Wo standen wann Wards, wo war der Spieler und wo die anderen 9.</p>
         <div className="sc-row">
-          <select value={accountId} onChange={e => setAccountId(e.target.value)}>
-            {candidates.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+          <select value={accountId || candidates[0]?.id || ''} onChange={e => { setAccountId(e.target.value); setCustom(''); void loadList(e.target.value); }}>
+            {groups.map(g => <optgroup key={g.label} label={g.label}>{g.players.map(c => <option key={`${g.label}-${c.id}`} value={c.id}>{c.label}</option>)}</optgroup>)}
           </select>
           <input placeholder="oder Account-ID" value={custom} onChange={e => setCustom(e.target.value)} size={12} />
-          <select value={count} onChange={e => setCount(Number(e.target.value))}>{[5, 10, 20].map(n => <option key={n} value={n}>{n} Spiele</option>)}</select>
-          <button onClick={load} disabled={loading || !id}>{loading ? 'Lädt …' : 'Laden'}</button>
-          {progress && <span className="muted">{progress}</span>}
+          <button onClick={() => void loadList(id)} disabled={loading || !id}>{loading ? 'Lädt …' : 'Spiele anzeigen'}</button>
+          <input placeholder="oder Match-ID" value={matchInput} onChange={e => setMatchInput(e.target.value)} size={12} />
+          <button onClick={() => void openById()} disabled={busyId !== null || !matchInput.trim()}>Match öffnen</button>
         </div>
         {error && <p className="sc-err">{error}</p>}
-        {matches.length > 0 && <>
+        {list.length > 0 && <div className="sc-hist">
+          <table className="sc-tbl"><thead><tr><th>Datum</th><th>Held</th><th>Seite</th><th>Ergebnis</th><th>Dauer</th><th>Replay</th></tr></thead><tbody>
+            {list.map(e => <tr key={e.id} className={`${curId === e.id ? 'act' : ''} ${e.parsed ? '' : 'dim'}`} onClick={() => void openMatch(e)} title={e.parsed ? 'Anklicken: Wards und Bewegungen laden' : 'Replay noch nicht ausgewertet'}>
+              <td>{new Date(e.startDateTime * 1000).toLocaleDateString('de-DE')}</td>
+              <td>{heroNames[e.heroId] ?? e.heroId}</td>
+              <td>{e.radiant ? 'Radiant' : 'Dire'}</td>
+              <td className={e.radiant === e.didRadiantWin ? 'win' : 'loss'}>{e.radiant === e.didRadiantWin ? 'Sieg' : 'Niederlage'}</td>
+              <td>{Math.round(e.durationSeconds / 60)} min</td>
+              <td>{busyId === e.id ? 'lädt …' : loaded[e.id] ? '✓ geladen' : e.parsed ? 'verfügbar' : '–'}</td>
+            </tr>)}
+          </tbody></table>
+          <small className="muted">Klicke ein Spiel an, um Wards und Bewegungen zu laden. Ausgegraute Spiele hat STRATZ noch nicht ausgewertet.</small>
+        </div>}
+        {cur && <>
           <div className="sc-row">
-            <span className="sc-side">
-              <button className={side === 'radiant' ? 'on' : ''} onClick={() => { setSide('radiant'); setSel(0); setClock(0); }}>Spieler auf Radiant ({nRad})</button>
-              <button className={side === 'dire' ? 'on' : ''} onClick={() => { setSide('dire'); setSel(0); setClock(0); }}>Spieler auf Dire ({matches.length - nRad})</button>
-            </span>
             <label>Wards von <select value={wardTeam} onChange={e => setWardTeam(e.target.value as WardTeam)}><option value="all">allen</option><option value="enemy">Gegnern des Spielers</option><option value="focus">Spieler-Team</option></select></label>
             <label><input type="checkbox" checked={obs} onChange={e => setObs(e.target.checked)} /> Observer</label>
             <label><input type="checkbox" checked={sent} onChange={e => setSent(e.target.checked)} /> Sentry</label>
             <label><input type="checkbox" checked={allPlayers} onChange={e => setAllPlayers(e.target.checked)} /> alle 10 Helden</label>
             <label>Spur <select value={trail} onChange={e => setTrail(Number(e.target.value) as Trail)}><option value={90}>90 s</option><option value={300}>5 min</option><option value={100000}>ganzes Spiel</option></select></label>
+            <strong>{heroNames[cur.focusHero] ?? ''} · {cur.focusRadiant ? 'Radiant' : 'Dire'} · {cur.focusRadiant === cur.didRadiantWin ? 'Sieg' : 'Niederlage'}</strong>
           </div>
-          {!cur ? <p className="muted">Keine Spiele auf dieser Seite.</p> : <>
-            <div className="sc-row">
-              <select value={Math.min(sel, shown.length - 1)} onChange={e => { setSel(Number(e.target.value)); setClock(0); }}>
-                {shown.map((m, i) => <option key={`${m.id}-${i}`} value={i}>{new Date(m.startDateTime * 1000).toLocaleDateString('de-DE')} · {heroNames[m.focusHero] ?? m.focusHero} · {m.focusRadiant === m.didRadiantWin ? 'Sieg' : 'Niederlage'} · {Math.round(m.durationSeconds / 60)} min · {m.id}</option>)}
-              </select>
-            </div>
             <div className="sc-row">
               <button onClick={() => setClock(c => Math.max(-90, c - 60))}>−1 min</button>
               <input type="range" min={-90} max={maxClock} value={clock} onChange={e => setClock(Number(e.target.value))} style={{ flex: 1, minWidth: 220 }} />
@@ -229,7 +254,6 @@ export default function ScoutPanel({ teamData, heroNames, startOpen }: Props) {
                 <small className="muted">Spalten: gesetzt · Typ · Team · Held · Gegend · Ende. Zeile anklicken springt zur Zeit.</small>
               </div>
             </div>
-          </>}
           <div className="sc-row">
             <label>Karte (Bild) <input type="file" accept="image/*" onChange={e => onMapFile(e.target.files?.[0])} /></label>
             {mapImg && <>
@@ -240,7 +264,7 @@ export default function ScoutPanel({ teamData, heroNames, startOpen }: Props) {
             </>}
           </div>
           <details><summary>Datenprüfung</summary>
-            <p className="muted">{matches.length} Spiele geladen · {skipped.unparsed} ohne ausgewertetes Replay übersprungen · {skipped.failed} Abruf fehlgeschlagen. Ward-Ereignisse nach Aktion: {Object.entries(actions).map(([k, v]) => `${k}: ${v}`).join(', ') || '–'}. Wardende nur, wenn STRATZ ein Ende-Ereignis liefert (sonst „≈“ = Standarddauer Observer 6, Sentry 8 min). Die Karte ist über die beiden Brunnen kalibriert; die Regler korrigieren Restabweichungen.</p>
+            <p className="muted">{matches.length} Spiel(e) geladen. Ward-Ereignisse nach Aktion: {Object.entries(actions).map(([k, v]) => `${k}: ${v}`).join(', ') || '–'}. Wardende nur, wenn STRATZ ein Ende-Ereignis liefert (sonst „≈“ = Standarddauer Observer 6, Sentry 8 min). Die Karte ist über die beiden Brunnen kalibriert; die Regler korrigieren Restabweichungen.</p>
           </details>
         </>}
       </>}
