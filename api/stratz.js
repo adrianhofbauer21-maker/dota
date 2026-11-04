@@ -1,5 +1,9 @@
 // Vercel-Funktion: leitet die STRATZ-Abfragen der App weiter und hängt den geheimen Token serverseitig an.
 // Der Token steht NUR in den Vercel-Einstellungen (Environment Variable STRATZ_TOKEN), nie im Browser-Code oder im Repository.
+// Kleiner Zwischenspeicher (pro Serverinstanz, 10 Minuten): gleiche Abfragen gehen nicht mehrfach an STRATZ (schont das Limit von 2 IP-Adressen / 15 min).
+const CACHE = new Map();
+const TTL = 10 * 60 * 1000;
+
 export default async function handler(req, res) {
   const token = (process.env.STRATZ_TOKEN ?? '').trim().replace(/^["']|["']$/g, '').replace(/^Bearer\s+/i, '');
   // Diagnose: https://DEINE-ADRESSE/api/stratz im Browser öffnen. Zeigt, ob ein Token ankommt und was STRATZ antwortet (nie den Token selbst).
@@ -34,6 +38,11 @@ export default async function handler(req, res) {
     res.status(413).json({ error: 'Anfrage zu groß' });
     return;
   }
+  const hit = CACHE.get(body);
+  if (hit && Date.now() - hit.t < TTL) {
+    res.status(200).setHeader('Content-Type', 'application/json').setHeader('X-Cache', 'HIT').send(hit.text);
+    return;
+  }
   try {
     const upstream = await fetch('https://api.stratz.com/graphql', {
       method: 'POST',
@@ -41,6 +50,10 @@ export default async function handler(req, res) {
       body,
     });
     const text = await upstream.text();
+    if (upstream.status === 200 && !text.includes('"errors"')) {
+      if (CACHE.size > 300) CACHE.delete(CACHE.keys().next().value);
+      CACHE.set(body, { t: Date.now(), text });
+    }
     res.status(upstream.status).setHeader('Content-Type', upstream.headers.get('content-type') ?? 'application/json').send(text);
   } catch (e) {
     res.status(502).json({ error: `STRATZ nicht erreichbar: ${e instanceof Error ? e.message : String(e)}` });

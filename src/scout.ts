@@ -97,10 +97,10 @@ export async function loadMatches(list: MatchListEntry[], onProgress: (done: num
         matches.push(toScoutMatch(raw, { slot: e.slot, radiant: e.radiant, heroId: e.heroId }));
       } catch { failed += 1; }
       done += 1; onProgress(done, list.length);
-      await sleep(300);
+      await sleep(400);
     }
   };
-  await Promise.all([worker(), worker()]);
+  await Promise.all([worker()]);
   matches.sort((a, b) => b.startDateTime - a.startDateTime);
   return { matches, failed };
 }
