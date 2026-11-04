@@ -3,6 +3,7 @@ import './App.css';
 import TeamPanel from './TeamPanel';
 import RecommendPanel from './RecommendPanel';
 import MetaPanel from './MetaPanel';
+import ScoutPanel from './ScoutPanel';
 import { useTeamData } from './teamData';
 import { normHeroName } from './dotabuffImport';
 import { useRelations } from './matchups';
@@ -183,7 +184,7 @@ export default function App() {
       <label>First Pick <select value={firstPick} onChange={e=>changeFirst(e.target.value as Side)}><option>Radiant</option><option>Dire</option></select></label>
       <button onClick={()=>setEntries(prev=>prev.slice(0,-1))} disabled={!entries.length}>↶ Undo</button>
       <button onClick={reset}>↻ Reset</button>
-      <span>LOCAL DRAFT · v1.12</span>
+      <span>LOCAL DRAFT · v1.15</span>
     </div>
     <div className="cm-layout">
       <section className="cm-heroes">
@@ -228,6 +229,7 @@ export default function App() {
     <MetaPanel metaByPos={metaByPos} heroNames={heroNames} canon={canonHero} portrait={portrait} source={metaSource} positional={Boolean(stratzMeta.meta)} />
     <TeamPanel teamData={teamData} heroNames={heroNames} canon={canonHero} portrait={portrait} />
     <TeamPanel side="enemy" unavailable={unavailableIds} teamData={teamData} heroNames={heroNames} canon={canonHero} portrait={portrait} />
+    <ScoutPanel teamData={teamData} heroNames={heroNames} />
     <footer className="cm-footer">Draft-Reihenfolge ist konfigurierbar und muss vor echten Scrims gegen den aktuellen Client geprüft werden. Hero-Attribute sind vorläufig zugeordnet. Keine Live-Timer in dieser Version.</footer>
   </main>;
 }

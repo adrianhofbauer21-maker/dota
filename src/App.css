@@ -157,3 +157,19 @@ body, #root { display:block; min-height:100vh; }
 .rp-range input[type=range]{width:90px}
 .rp-range b{color:#d7e1ec;min-width:44px;text-align:center}
 .rp-range button{padding:0 6px}
+
+/* Scouting */
+.sc{margin-top:16px}
+.sc-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0}
+.sc-row label{display:flex;gap:6px;align-items:center;font-size:13px}
+.sc-err{color:#d0463b}
+.sc-map{position:relative;max-width:560px}
+.sc-map canvas{width:100%;height:auto;border-radius:8px;border:1px solid rgba(128,128,128,.4);display:block}
+.sc-tip{position:absolute;transform:translate(10px,-50%);background:rgba(0,0,0,.85);color:#fff;font-size:12px;padding:6px 8px;border-radius:6px;pointer-events:none;white-space:nowrap;z-index:2}
+.sc-legend{font-size:12px;opacity:.75;margin-top:4px}
+.sc-legend .o{color:#e6b800}.sc-legend .s{color:#2f7bff}
+.sc-bars{display:flex;align-items:flex-end;gap:2px;height:80px;overflow-x:auto}
+.sc-bars div{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:16px}
+.sc-bars i{display:block;width:12px;background:#e6b800;border-radius:2px 2px 0 0}
+.sc-bars small{font-size:9px;opacity:.7}
+.sc-tbl td{padding:2px 10px 2px 0;font-size:13px}

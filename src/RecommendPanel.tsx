@@ -100,7 +100,7 @@ export default function RecommendPanel(p: Props) {
                 ? `Form: ${r.recentGames} Spiele in den letzten ${p.teamData.formWindow}${r.recentWinrate !== null ? `, ${Math.round(r.recentWinrate * 100)}% WR` : ''}${r.totalWinrate !== null ? ` · Gesamt-WR ${Math.round(r.totalWinrate * 100)}%` : ''}${r.recentKda !== null && r.perf !== null && r.kdaRatio !== null ? ` · KDA ${r.recentKda.toFixed(1)} (×${r.kdaRatio.toFixed(2)} vom eigenen Schnitt) → Performance ${r.perf.toFixed(0)} Pkt` : ''} → Form ${r.form.toFixed(0)} Pkt${r.formTrust !== null ? ` (Vertrauen ${(r.formTrust * 100).toFixed(0)} % wegen ${r.totalGames} Spielen gesamt)` : ''}`
                 : 'Form: keine Spielerdaten (nicht gewertet)',
               r.experience !== null
-                ? `Erfahrung: ${r.totalGames} Spiele gesamt (Winrate-bereinigt) → ${r.experience.toFixed(0)} Pkt`
+                ? `Erfahrung: ${r.totalGames} Spiele gesamt (nur Anzahl, ohne Winrate) → ${r.experience.toFixed(0)} Pkt`
                 : 'Erfahrung: keine Spielerdaten (nicht gewertet)',
               `Meta (Pos ${pl.role}): ${r.metaWinrate !== null ? `${(r.metaWinrate * 100).toFixed(1)}% WR bei ${r.metaGames} Spielen (normalisiert: Winrate + Beliebtheit)` : 'keine Daten → neutral'} → ${r.meta.toFixed(0)} Pkt`,
               r.matchup !== null

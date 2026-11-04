@@ -3,7 +3,8 @@ import type { MetaEntry } from './meta';
 import type { HeroStat } from './stats';
 
 export type Weights = { form: number; experience: number; meta: number; matchup: number; synergy: number; comp: number };
-export const DEFAULT_WEIGHTS: Weights = { form: 25, experience: 15, meta: 20, matchup: 15, synergy: 15, comp: 10 };
+// Standard: nur Erfahrung und Form zählen. Meta, Matchup, Synergie und Komposition stehen auf 0 (im UI per Regler zuschaltbar).
+export const DEFAULT_WEIGHTS: Weights = { form: 50, experience: 50, meta: 0, matchup: 0, synergy: 0, comp: 0 };
 
 export type Rec = {
   heroId: number;

@@ -29,8 +29,6 @@ export type HeroStat = {
 const PRIOR_GAMES = 8;
 const TOTAL_PRIOR_GAMES = 20; // Glättung der älteren Winrate (Richtung 50 %): wenige alte Spiele zählen kaum
 const EXPERIENCE_HALF = 40;  // Bei 40 Spielen auf dem Helden: 50 Erfahrungspunkte
-const EXP_WR_PRIOR = 10;     // Glättung der Gesamtwinrate für den Erfahrungsfaktor
-const EXP_WR_SPREAD = 2.5;   // 40 % Winrate → Faktor 0,75; 60 % → 1,25 (gedeckelt auf 0,5–1,2)
 const PERF_PRIOR = 8;        // Glättung der Performance Richtung "wie sonst"
 const PERF_SPREAD = 60;      // KDA 50 % über dem eigenen Schnitt = +30 Punkte (bei voller Stichprobe)
 
@@ -40,14 +38,8 @@ export function confidenceFor(games: number): Confidence {
   return 'niedrig';
 }
 
-export const experienceScore = (games: number, wins?: number) => {
-  const base = (100 * games) / (games + EXPERIENCE_HALF);
-  if (wins === undefined) return base;
-  // Viele Spiele mit schlechter Winrate zählen weniger: Faktor aus der geglätteten Gesamtwinrate (50 % = 1,0).
-  const wr = (wins + EXP_WR_PRIOR * 0.5) / (games + EXP_WR_PRIOR);
-  const factor = Math.max(0.5, Math.min(1.2, 1 + EXP_WR_SPREAD * (wr - 0.5)));
-  return Math.min(100, base * factor);
-};
+// Erfahrung = nur die Anzahl der Spiele auf dem Helden (unabhängig von der Winrate).
+export const experienceScore = (games: number) => (100 * games) / (games + EXPERIENCE_HALF);
 
 export function isWin(m: MatchRow): boolean {
   const radiant = m.player_slot < 128;
@@ -98,7 +90,7 @@ export function heroStats(recent: MatchRow[], totals: PlayerHeroRow[]): HeroStat
         totalGames,
         totalWins,
         totalWinrate,
-        experience: experienceScore(totalGames, totalWins),
+        experience: experienceScore(totalGames),
         games,
         wins,
         winrate: games > 0 ? wins / games : null,
