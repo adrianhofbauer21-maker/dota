@@ -7,6 +7,27 @@ const TTL = 10 * 60 * 1000;
 export default async function handler(req, res) {
   const token = (process.env.STRATZ_TOKEN ?? '').trim().replace(/^["']|["']$/g, '').replace(/^Bearer\s+/i, '');
   // Diagnose: https://DEINE-ADRESSE/api/stratz im Browser öffnen. Zeigt, ob ein Token ankommt und was STRATZ antwortet (nie den Token selbst).
+  if (req.method === 'GET' && typeof req.query?.q === 'string' && req.query.q) {
+    // Zwischenspeicherbare Abfrage (GET): Vercels CDN merkt sich die Antwort für alle Nutzer – so gehen gleiche Abfragen nur einmal an STRATZ.
+    if (!token) { res.status(500).json({ error: 'STRATZ_TOKEN fehlt in den Vercel-Einstellungen.' }); return; }
+    const query = req.query.q;
+    if (query.length > 12000) { res.status(413).json({ error: 'Anfrage zu groß' }); return; }
+    try {
+      const upstream = await fetch('https://api.stratz.com/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'STRATZ_API', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ query }),
+      });
+      const text = await upstream.text();
+      const good = upstream.status === 200 && !text.includes('"errors"');
+      res.setHeader('Cache-Control', good ? 'public, s-maxage=900, stale-while-revalidate=86400' : 'no-store');
+      res.status(upstream.status).setHeader('Content-Type', upstream.headers.get('content-type') ?? 'application/json').send(text);
+    } catch (e) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(502).json({ error: `STRATZ nicht erreichbar: ${e instanceof Error ? e.message : String(e)}` });
+    }
+    return;
+  }
   if (req.method === 'GET') {
     const info = { tokenGesetzt: token.length > 0, tokenLaenge: token.length };
     if (token) {

@@ -15,8 +15,9 @@ export type ScoutMatch = {
   /** Spieler, dessen letzte Spiele geladen wurden */
   focusSlot: number; focusRadiant: boolean; focusHero: number;
   actions: Record<string, number>; // Häufigkeit der Ward-Aktionen (zur Datenprüfung)
+  source?: 'stratz' | 'opendota'; // OpenDota liefert nur Wards (keine Bewegungen)
 };
-export type MatchListEntry = { id: number; startDateTime: number; durationSeconds: number; didRadiantWin: boolean; parsed: boolean; slot: number; radiant: boolean; heroId: number };
+export type MatchListEntry = { source?: 'stratz' | 'opendota'; id: number; startDateTime: number; durationSeconds: number; didRadiantWin: boolean; parsed: boolean; slot: number; radiant: boolean; heroId: number };
 
 /** Lebensdauer, falls ein Ward kein Ende-Ereignis hat (Observer 6 min, Sentry 8 min). */
 export const WARD_LIFETIME: Record<WardKind, number> = { OBSERVER: 360, SENTRY: 480 };
@@ -130,3 +131,46 @@ export function zoneOf(x: number, y: number): (typeof ZONES)[number] {
 }
 
 export const fmtTime = (s: number) => `${s < 0 ? '-' : ''}${Math.floor(Math.abs(s) / 60)}:${String(Math.floor(Math.abs(s) % 60)).padStart(2, '0')}`;
+
+
+// ---- OpenDota als Ersatz (wenn STRATZ das Abruflimit erreicht hat) ----
+const OD = 'https://api.opendota.com/api';
+async function odJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${OD}${path}`);
+  if (res.status === 429) throw new Error('OpenDota-Limit erreicht – bitte kurz warten.');
+  if (!res.ok) throw new Error(`OpenDota-Fehler ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+export async function fetchMatchListOD(accountId: string, take: number): Promise<MatchListEntry[]> {
+  const proj = ['hero_id', 'player_slot', 'radiant_win', 'duration', 'start_time', 'version'].map(p => `project=${p}`).join('&');
+  const rows = await odJson<{ match_id: number; hero_id: number; player_slot: number; radiant_win: boolean; duration: number; start_time: number; version: number | null }[]>(`/players/${accountId}/matches?limit=${take}&${proj}`);
+  return rows.map(r => ({ source: 'opendota' as const, id: r.match_id, startDateTime: r.start_time, durationSeconds: r.duration, didRadiantWin: r.radiant_win,
+    parsed: r.version != null, slot: r.player_slot, radiant: r.player_slot < 128, heroId: r.hero_id }));
+}
+
+type OdLog = { time: number; x?: number; y?: number; key?: string; ehandle?: number };
+type OdPlayer = { account_id?: number | null; player_slot: number; hero_id: number; isRadiant?: boolean; obs_log?: OdLog[] | null; sen_log?: OdLog[] | null; obs_left_log?: OdLog[] | null; sen_left_log?: OdLog[] | null };
+
+export async function fetchMatchOD(matchId: number, focus: { slot: number; radiant: boolean; heroId: number } | { accountId: string }): Promise<ScoutMatch> {
+  const m = await odJson<{ match_id: number; start_time: number; duration: number; radiant_win: boolean; players: OdPlayer[]; version?: number | null }>(`/matches/${matchId}`);
+  if (!m.players?.some(p => p.obs_log != null || p.sen_log != null)) throw new Error('OpenDota hat für dieses Spiel keine Ward-Daten (Replay nicht ausgewertet).');
+  const left = new Map<string, number>();
+  for (const p of m.players) for (const l of [...(p.obs_left_log ?? []), ...(p.sen_left_log ?? [])]) left.set(String(l.ehandle ?? l.key), l.time);
+  const wards: Ward[] = [];
+  for (const p of m.players) {
+    const radiant = p.isRadiant ?? p.player_slot < 128;
+    for (const [logs, kind] of [[p.obs_log, 'OBSERVER'], [p.sen_log, 'SENTRY']] as const) for (const l of logs ?? []) {
+      if (typeof l.x !== 'number' || typeof l.y !== 'number') continue;
+      const e = left.get(String(l.ehandle ?? l.key));
+      wards.push({ kind, radiant, slot: p.player_slot, x: l.x, y: l.y, start: l.time, end: e !== undefined ? Math.max(l.time, e) : l.time + WARD_LIFETIME[kind], ended: e !== undefined, endAction: e !== undefined ? 'LEFT' : '' });
+    }
+  }
+  const me = 'slot' in focus ? m.players.find(p => p.player_slot === focus.slot) : m.players.find(p => String(p.account_id) === focus.accountId) ?? m.players[0];
+  const mySlot = me?.player_slot ?? 0;
+  return {
+    id: m.match_id, startDateTime: m.start_time, durationSeconds: m.duration, didRadiantWin: m.radiant_win,
+    players: m.players.map(p => ({ slot: p.player_slot, steamAccountId: p.account_id ?? null, heroId: p.hero_id, radiant: p.isRadiant ?? p.player_slot < 128, position: null, pos: [] })),
+    wards, focusSlot: mySlot, focusRadiant: mySlot < 128, focusHero: me?.hero_id ?? 0, actions: { OPENDOTA: wards.length }, source: 'opendota',
+  };
+}

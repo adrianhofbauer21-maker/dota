@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { useTeamData } from './teamData';
 import { LEAGUE_TEAMS } from './leagueTeams';
-import { LANE_LINES, fetchMatchList, fetchMatchPlayback, fmtTime, toScoutMatch, zoneOf, type MatchListEntry, type ScoutMatch, type Ward } from './scout';
+import { LANE_LINES, fetchMatchList, fetchMatchListOD, fetchMatchOD, fetchMatchPlayback, fmtTime, toScoutMatch, zoneOf, type MatchListEntry, type ScoutMatch, type Ward } from './scout';
 
 type Props = { teamData: ReturnType<typeof useTeamData>; heroNames: Record<number, string>; startOpen?: boolean };
 
@@ -37,6 +37,7 @@ export default function ScoutPanel({ teamData, heroNames, startOpen }: Props) {
   const [matchInput, setMatchInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [note, setNote] = useState('');
 
   const [wardTeam, setWardTeam] = useState<WardTeam>('all');
   const [obs, setObs] = useState(true);
@@ -74,21 +75,40 @@ export default function ScoutPanel({ teamData, heroNames, startOpen }: Props) {
   const loadList = async (accId: string) => {
     if (!/^\d+$/.test(accId)) { setError('Bitte einen Spieler wählen oder eine numerische Account-ID eingeben.'); return; }
     setLoading(true); setError(''); setList([]); setCurId(null);
+    setNote('');
     try {
-      const l = await fetchMatchList(accId, 40);
+      let l: MatchListEntry[];
+      try { l = await fetchMatchList(accId, 40); }
+      catch (e1) {
+        const m1 = e1 instanceof Error ? e1.message : String(e1);
+        try { l = await fetchMatchListOD(accId, 40); setNote('STRATZ ist gerade nicht verfügbar (Limit/Fehler) – die Spiele kommen von OpenDota. Dort gibt es nur Wards, keine Bewegungen.'); }
+        catch (e2) { throw new Error(`${m1} · Ersatz OpenDota: ${e2 instanceof Error ? e2.message : String(e2)}`); }
+      }
       setList(l);
-      if (l.length === 0) setError('STRATZ liefert für diesen Spieler keine Spiele (Profil evtl. privat).');
+      if (l.length === 0) setError('Für diesen Spieler wurden keine Spiele gefunden (Profil evtl. privat).');
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     setLoading(false);
   };
 
   const showMatch = (m: ScoutMatch) => { setLoaded(prev => ({ ...prev, [m.id]: m })); setCurId(m.id); setClock(0); setError(''); };
   const openMatch = async (e: MatchListEntry) => {
-    if (loaded[e.id]) { setCurId(e.id); setClock(0); setError(''); return; }
-    if (!e.parsed) { setError(`Match ${e.id}: STRATZ hat dieses Replay (noch) nicht ausgewertet – es gibt keine Ward-/Positionsdaten. Neuere Spiele werden oft erst nach einiger Zeit ausgewertet.`); return; }
+    if (loaded[e.id]) { setCurId(e.id); setClock(0); setError(''); setNote(loaded[e.id].source === 'opendota' ? 'Dieses Spiel kommt von OpenDota: nur Wards, keine Bewegungen.' : ''); return; }
+    if (!e.parsed) { setError(`Match ${e.id}: Dieses Replay ist (noch) nicht ausgewertet – es gibt keine Ward-/Positionsdaten. Neuere Spiele werden oft erst nach einiger Zeit ausgewertet.`); return; }
     setBusyId(e.id); setError('');
-    try { showMatch(toScoutMatch(await fetchMatchPlayback(e.id), { slot: e.slot, radiant: e.radiant, heroId: e.heroId })); }
-    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    try {
+      let m: ScoutMatch | null = null;
+      if (e.source !== 'opendota') {
+        try {
+          const raw = await fetchMatchPlayback(e.id);
+          if (raw.playbackData?.wardEvents) m = toScoutMatch(raw, { slot: e.slot, radiant: e.radiant, heroId: e.heroId });
+        } catch { /* Ersatz unten */ }
+      }
+      if (!m) {
+        m = await fetchMatchOD(e.id, { slot: e.slot, radiant: e.radiant, heroId: e.heroId });
+        setNote('Dieses Spiel kommt von OpenDota (STRATZ nicht verfügbar): nur Wards, keine Bewegungen.');
+      } else setNote('');
+      showMatch(m);
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     setBusyId(null);
   };
   const openById = async () => {
@@ -96,10 +116,13 @@ export default function ScoutPanel({ teamData, heroNames, startOpen }: Props) {
     if (!Number.isInteger(mid) || mid <= 0) { setError('Bitte eine numerische Match-ID eingeben.'); return; }
     setBusyId(mid); setError('');
     try {
-      const raw = await fetchMatchPlayback(mid);
-      const me = raw.players.find(p => String(p.steamAccountId) === id) ?? raw.players[0];
-      if (!raw.playbackData?.wardEvents) setError('Für dieses Match liegen keine Replaydaten vor (nicht ausgewertet).');
-      showMatch(toScoutMatch(raw, { slot: me.playerSlot, radiant: me.isRadiant, heroId: me.heroId }));
+      let m: ScoutMatch | null = null;
+      try {
+        const raw = await fetchMatchPlayback(mid);
+        if (raw.playbackData?.wardEvents) { const me = raw.players.find(q => String(q.steamAccountId) === id) ?? raw.players[0]; m = toScoutMatch(raw, { slot: me.playerSlot, radiant: me.isRadiant, heroId: me.heroId }); }
+      } catch { /* Ersatz unten */ }
+      if (!m) { m = await fetchMatchOD(mid, { accountId: id }); setNote('Dieses Spiel kommt von OpenDota (STRATZ nicht verfügbar): nur Wards, keine Bewegungen.'); } else setNote('');
+      showMatch(m);
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     setBusyId(null);
   };
@@ -206,6 +229,7 @@ export default function ScoutPanel({ teamData, heroNames, startOpen }: Props) {
           <button onClick={() => void openById()} disabled={busyId !== null || !matchInput.trim()}>Match öffnen</button>
         </div>
         {error && <p className="sc-err">{error}</p>}
+        {note && <p className="sc-note">ℹ {note}</p>}
         {list.length > 0 && <div className="sc-hist">
           <table className="sc-tbl"><thead><tr><th>Datum</th><th>Held</th><th>Seite</th><th>Ergebnis</th><th>Dauer</th><th>Replay</th></tr></thead><tbody>
             {list.map(e => <tr key={e.id} className={`${curId === e.id ? 'act' : ''} ${e.parsed ? '' : 'dim'}`} onClick={() => void openMatch(e)} title={e.parsed ? 'Anklicken: Wards und Bewegungen laden' : 'Replay noch nicht ausgewertet'}>
