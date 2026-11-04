@@ -85,9 +85,23 @@ function staticAttr(hero: string): string {
   return 'UNIVERSAL';
 }
 
+type Tab = 'draft' | 'meta' | 'teams' | 'scout';
+const TABS: { key: Tab; label: string; hint: string }[] = [
+  { key: 'draft', label: '🎯 Draft', hint: 'Picks & Bans eintragen, Empfehlungen ansehen' },
+  { key: 'meta', label: '📈 Meta', hint: 'Aktuell starke Helden je Position' },
+  { key: 'teams', label: '👥 Teams', hint: 'Eigenes Team und Gegner verwalten' },
+  { key: 'scout', label: '🗺 Scouting', hint: 'Wards und Bewegungen aus echten Spielen' },
+];
+function loadPref<T extends string>(key: string, fallback: T, allowed: T[]): T {
+  try { const v = localStorage.getItem(key) as T | null; if (v && allowed.includes(v)) return v; } catch { /* ignore */ }
+  return fallback;
+}
+
 export default function App() {
-  const [ourSide,setOurSide] = useState<Side>('Radiant');
-  const [firstPick,setFirstPick] = useState<Side>('Radiant');
+  const [ourSide,setOurSide] = useState<Side>(() => loadPref<Side>('dota-our-side', 'Radiant', ['Radiant','Dire']));
+  const [firstPick,setFirstPick] = useState<Side>(() => loadPref<Side>('dota-first-pick', 'Radiant', ['Radiant','Dire']));
+  const [tab,setTab] = useState<Tab>(() => loadPref<Tab>('dota-tab', 'draft', ['draft','meta','teams','scout']));
+  useEffect(() => { try { localStorage.setItem('dota-our-side', ourSide); localStorage.setItem('dota-first-pick', firstPick); localStorage.setItem('dota-tab', tab); } catch { /* ignore */ } }, [ourSide, firstPick, tab]);
   const [entries,setEntries] = useState<Entry[]>([]);
   const [search,setSearch] = useState('');
   const [showUsed,setShowUsed] = useState(true);
@@ -173,22 +187,36 @@ export default function App() {
       {active && <span className="dt-current">{step.action === 'pick' ? 'PICK' : 'BAN'}</span>}
     </div>;
   }
+  const show = (t: Tab) => ({ hidden: tab !== t });
   return <main className="cm-app">
+    <nav className="cm-tabs" aria-label="Bereiche">
+      {TABS.map(t => <button key={t.key} className={tab === t.key ? 'on' : ''} title={t.hint} onClick={() => { setTab(t.key); window.scrollTo({ top: 0 }); }}>{t.label}</button>)}
+      <span className="cm-tabs-hint">{TABS.find(t => t.key === tab)?.hint}</span>
+    </nav>
+    <div {...show('draft')}>
+    <details className="cm-help"><summary>❓ So funktioniert's</summary>
+      <ol>
+        <li>Oben wählst du, ob dein Team Radiant oder Dire ist und wer den First Pick hat.</li>
+        <li>Klicke Helden links an, um Picks und Bans in der richtigen Reihenfolge einzutragen. „Undo“ nimmt den letzten Schritt zurück.</li>
+        <li>Unter dem Draft stehen die Empfehlungen je Spieler (Pick) und die Ban-Empfehlungen gegen den Gegner. Mit den Reglern stellst du ein, was zählt.</li>
+        <li>Im Bereich „Teams“ trägst du Spieler-IDs für dein Team und die Gegner ein, im Bereich „Scouting“ siehst du Wards und Bewegungen vergangener Spiele.</li>
+      </ol>
+    </details>
     <header className="cm-header">
       <div className="cm-reserve radiant"><strong>RADIANT</strong><span>CAPTAINS MODE</span></div>
-      <div className="cm-center"><div className="cm-clock">{String(entries.length).padStart(2,'0')} <small>/ 24</small></div><h1>{current ? `${turnSide?.toUpperCase()} — ${current.action === 'ban' ? 'BAN' : 'PICK'}` : 'DRAFT COMPLETE'}</h1><p>{current ? `Phase ${current.phase} · ${turnSide === ourSide ? 'Dein Team' : 'Gegner'}` : 'Alle Aktionen abgeschlossen'}</p></div>
+      <div className="cm-center"><div className="cm-clock">{String(entries.length).padStart(2,'0')} <small>/ 24</small></div><h1>{current ? `${turnSide?.toUpperCase()} — ${current.action === 'ban' ? 'BAN' : 'PICK'}` : 'DRAFT KOMPLETT'}</h1><p>{current ? `Phase ${current.phase} · ${turnSide === ourSide ? 'Dein Team' : 'Gegner'}` : 'Alle Aktionen abgeschlossen'}</p></div>
       <div className="cm-reserve dire"><strong>DIRE</strong><span>CAPTAINS MODE</span></div>
     </header>
     <div className="cm-toolbar">
       <label>Unser Team <select value={ourSide} onChange={e=>setOurSide(e.target.value as Side)}><option>Radiant</option><option>Dire</option></select></label>
       <label>First Pick <select value={firstPick} onChange={e=>changeFirst(e.target.value as Side)}><option>Radiant</option><option>Dire</option></select></label>
-      <button onClick={()=>setEntries(prev=>prev.slice(0,-1))} disabled={!entries.length}>↶ Undo</button>
-      <button onClick={reset}>↻ Reset</button>
-      <span>LOCAL DRAFT · v1.19</span>
+      <button onClick={()=>setEntries(prev=>prev.slice(0,-1))} disabled={!entries.length}>↶ Rückgängig</button>
+      <button onClick={reset}>↻ Zurücksetzen</button>
+      <span className="cm-ver">v1.20</span>
     </div>
     <div className="cm-layout">
       <section className="cm-heroes">
-        <div className="cm-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search heroes..." /><label><input type="checkbox" checked={showUsed} onChange={e=>setShowUsed(e.target.checked)}/> Show used</label></div>
+        <div className="cm-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Helden suchen …" /><label><input type="checkbox" checked={showUsed} onChange={e=>setShowUsed(e.target.checked)}/> Gepickte zeigen</label></div>
         <div className="cm-tags"><span>⚔ CARRY</span><span>♡ SUPPORT</span><span>ϟ NUKER</span><span>▣ PUSHER</span><span>⬡ DURABLE</span><span>↗ INITIATOR</span></div>
         <div className="cm-attributes">{groups.map((group,i)=>{
           const filtered = group.heroes.filter(h=>h.toLowerCase().includes(search.toLowerCase().trim()) && (showUsed || !used.has(h)));
@@ -199,7 +227,7 @@ export default function App() {
         })}</div>
       </section>
       <aside className="cm-right">
-        <div className="cm-intel"><span>◉ Draft tree</span><span>INTEL · soon</span></div>
+        <div className="cm-intel"><span>◉ Draft-Verlauf</span></div>
         <div className="dt">
           <div className="dt-head"><strong className="radiant">RADIANT</strong><strong className="dire">DIRE</strong></div>
           <div className="dt-rows" aria-label="Captains Mode Draft-Baum">
@@ -216,7 +244,7 @@ export default function App() {
             })}
           </div>
         </div>
-        <div className="cm-preview">{selected ? <><img src={portrait(selected.hero)} alt=""/><div><small>{selected.action.toUpperCase()} · {selected.side}</small><strong>{selected.hero}</strong></div></> : <div className="cm-preview-empty"><small>NEXT ACTION</small><strong>{current ? `${turnSide} ${current.action.toUpperCase()}` : 'Draft complete'}</strong></div>}</div>
+        <div className="cm-preview">{selected ? <><img src={portrait(selected.hero)} alt=""/><div><small>{selected.action.toUpperCase()} · {selected.side}</small><strong>{selected.hero}</strong></div></> : <div className="cm-preview-empty"><small>NÄCHSTE AKTION</small><strong>{current ? `${turnSide} ${current.action.toUpperCase()}` : 'Draft komplett'}</strong></div>}</div>
       </aside>
     </div>
     {heroStatsError && <div className="tp-error">OpenDota-Heldenstatistik: {heroStatsError}</div>}
@@ -226,10 +254,12 @@ export default function App() {
       bracket={bracket} onBracket={setBracket} weights={weights} onWeights={setWeights}
       headline={current ? `${turnSide} · ${current.action === 'ban' ? 'BAN' : 'PICK'} · ${turnSide === ourSide ? 'Dein Team' : 'Gegner'}` : 'Draft komplett'}
       canPick={Boolean(current && current.action === 'pick' && turnSide === ourSide)} onPick={choose} canBan={Boolean(current && current.action === 'ban' && turnSide === ourSide)} onBan={choose} assign={assign} onAssign={assignHero} metaReady={(metaByPos.get(1)?.size ?? 0) > 0} positional={Boolean(stratzMeta.meta)} metaError={stratzMeta.error ? `${stratzMeta.error} – Ersatz: OpenDota-Meta` : ''} />
-    <MetaPanel metaByPos={metaByPos} heroNames={heroNames} canon={canonHero} portrait={portrait} source={metaSource} positional={Boolean(stratzMeta.meta)} />
-    <TeamPanel teamData={teamData} heroNames={heroNames} canon={canonHero} portrait={portrait} />
+    </div>
+    <div {...show('meta')}><MetaPanel metaByPos={metaByPos} heroNames={heroNames} canon={canonHero} portrait={portrait} source={metaSource} positional={Boolean(stratzMeta.meta)} /></div>
+    <div {...show('teams')}><TeamPanel teamData={teamData} heroNames={heroNames} canon={canonHero} portrait={portrait} />
     <TeamPanel side="enemy" unavailable={unavailableIds} teamData={teamData} heroNames={heroNames} canon={canonHero} portrait={portrait} />
-    <ScoutPanel teamData={teamData} heroNames={heroNames} />
-    <footer className="cm-footer">Draft-Reihenfolge ist konfigurierbar und muss vor echten Scrims gegen den aktuellen Client geprüft werden. Hero-Attribute sind vorläufig zugeordnet. Keine Live-Timer in dieser Version.</footer>
+    </div>
+    <div {...show('scout')}><ScoutPanel teamData={teamData} heroNames={heroNames} startOpen /></div>
+    <footer className="cm-footer">Die Draft-Reihenfolge solltest du vor echten Scrims mit dem aktuellen Dota-Client abgleichen. Statistiken stammen von STRATZ und OpenDota und können Lücken haben. Keine Live-Timer.</footer>
   </main>;
 }

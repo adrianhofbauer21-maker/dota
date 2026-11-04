@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { useTeamData } from './teamData';
 import { LANE_LINES, fetchMatchList, fmtTime, loadMatches, zoneOf, type ScoutMatch, type Ward } from './scout';
 
-type Props = { teamData: ReturnType<typeof useTeamData>; heroNames: Record<number, string> };
+type Props = { teamData: ReturnType<typeof useTeamData>; heroNames: Record<number, string>; startOpen?: boolean };
 
 const S = 640; // Canvas-Größe in px
 const OBS_R = 12.5, SENT_R = 7.8; // Sichtradius in Karten-Zellen (1600 bzw. 1000 Einheiten, 1 Zelle = 128 Einheiten)
@@ -15,14 +15,14 @@ type Side = 'radiant' | 'dire';
 type WardTeam = 'focus' | 'enemy' | 'all';
 type Trail = 90 | 300 | 100000;
 
-export default function ScoutPanel({ teamData, heroNames }: Props) {
+export default function ScoutPanel({ teamData, heroNames, startOpen }: Props) {
   const candidates = useMemo(() => {
     const own = teamData.team.filter(p => /^\d+$/.test(p.accountId)).map(p => ({ id: p.accountId, label: `${p.name} (eigenes Team)` }));
     const en = teamData.enemyTeam.filter(p => /^\d+$/.test(p.accountId)).map(p => ({ id: p.accountId, label: `${p.name} (${teamData.enemyName || 'Gegner'})` }));
     return [...own, ...en];
   }, [teamData.team, teamData.enemyTeam, teamData.enemyName]);
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(startOpen));
   const [accountId, setAccountId] = useState('');
   const [custom, setCustom] = useState('');
   const [count, setCount] = useState(10);

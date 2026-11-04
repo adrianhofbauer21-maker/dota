@@ -12,8 +12,9 @@ async function once<T>(query: string): Promise<T> {
   try { json = JSON.parse(text); } catch { /* kein JSON */ }
   if (json?.errors?.length) throw new Error(`STRATZ: ${json.errors[0].message}`);
   if (!res.ok || !json?.data) {
-    const hint = res.status === 401 || res.status === 403 ? ' (Token prüfen: .env.local, Dev-Server neu starten)' : '';
-    throw new Error(`STRATZ HTTP ${res.status}${hint}`);
+    const msg403 = 'STRATZ HTTP 403 – Abruflimit erreicht (STRATZ erlaubt pro Token nur 2 IP-Adressen in 15 Minuten). Bitte etwa 15 Minuten warten und die Seite neu laden. Falls es dauerhaft bleibt: Token prüfen.';
+    const hint = res.status === 401 ? ' – Token fehlt oder ist ungültig (Vercel: STRATZ_TOKEN, lokal: .env.local)' : '';
+    throw new Error(res.status === 403 ? msg403 : `STRATZ HTTP ${res.status}${hint}`);
   }
   return json.data;
 }

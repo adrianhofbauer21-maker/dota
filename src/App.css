@@ -181,3 +181,14 @@ body, #root { display:block; min-height:100vh; }
 .sc-list{flex:1 1 320px;min-width:300px}
 .sc-scroll{max-height:560px;overflow:auto}
 .sc-tbl tr{cursor:pointer}.sc-tbl tr.act{background:rgba(255,215,40,.18)}
+
+/* Navigation & Hilfe */
+.cm-tabs{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;background:#0f141c;border-bottom:1px solid rgba(255,255,255,.12)}
+.cm-tabs button{padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;font-size:15px;cursor:pointer}
+.cm-tabs button.on{background:#2f7bff;border-color:#2f7bff;color:#fff;font-weight:700}
+.cm-tabs-hint{margin-left:auto;font-size:12px;opacity:.65}
+.cm-help{margin:10px 12px;padding:8px 12px;border:1px solid rgba(255,255,255,.15);border-radius:8px;font-size:14px}
+.cm-help summary{cursor:pointer;font-weight:600}.cm-help ol{margin:8px 0 2px 18px;line-height:1.5}
+.cm-ver{opacity:.5;font-size:12px}
+[hidden]{display:none!important}
+@media (max-width:700px){.cm-tabs-hint{display:none}.cm-tabs button{flex:1;padding:8px 6px;font-size:13px}}
