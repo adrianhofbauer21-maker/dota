@@ -173,3 +173,11 @@ body, #root { display:block; min-height:100vh; }
 .sc-bars i{display:block;width:12px;background:#e6b800;border-radius:2px 2px 0 0}
 .sc-bars small{font-size:9px;opacity:.7}
 .sc-tbl td{padding:2px 10px 2px 0;font-size:13px}
+
+.sc-side button{margin-right:6px;opacity:.6}
+.sc-side button.on{opacity:1;font-weight:700;outline:2px solid #2f7bff}
+.sc-main{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.sc-main .sc-map{flex:0 1 640px;max-width:100%}
+.sc-list{flex:1 1 320px;min-width:300px}
+.sc-scroll{max-height:560px;overflow:auto}
+.sc-tbl tr{cursor:pointer}.sc-tbl tr.act{background:rgba(255,215,40,.18)}

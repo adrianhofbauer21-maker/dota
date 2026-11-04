@@ -184,7 +184,7 @@ export default function App() {
       <label>First Pick <select value={firstPick} onChange={e=>changeFirst(e.target.value as Side)}><option>Radiant</option><option>Dire</option></select></label>
       <button onClick={()=>setEntries(prev=>prev.slice(0,-1))} disabled={!entries.length}>↶ Undo</button>
       <button onClick={reset}>↻ Reset</button>
-      <span>LOCAL DRAFT · v1.15</span>
+      <span>LOCAL DRAFT · v1.19</span>
     </div>
     <div className="cm-layout">
       <section className="cm-heroes">
